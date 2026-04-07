@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Deployment Environment"
+        description: "Environment"
         required: true
         type: choice
         options:
@@ -19,47 +19,40 @@ on:
           - windows
           - linux
 
-      version:
-        description: "OS Version (e.g. 2022, 2019, rhel9, ubuntu22)"
-        required: true
-        type: string
-
       count:
-        description: "How many hostnames to generate (1–20)"
+        description: "Number of hostnames to generate"
         required: true
         default: "1"
         type: string
 
+# Prevent parallel runs to avoid counter race conditions
+concurrency:
+  group: hostname-generator
+  cancel-in-progress: false
+
 jobs:
   generate-hostname:
-    name: Generate Unique Hostname
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          # Need write access to commit state file back
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Restore hostname state from cache
-        uses: actions/cache@v4
+      # Restore latest state file so counter continues from last run
+      - uses: actions/cache@v4
         with:
           path: hostname_state.json
           key: hostname-state-${{ github.run_id }}
-          restore-keys: |
-            hostname-state-
+          restore-keys: hostname-state-
 
-      - name: Validate count input
+      - name: Validate count
         run: |
           COUNT="${{ github.event.inputs.count }}"
           if ! [[ "$COUNT" =~ ^[0-9]+$ ]] || [ "$COUNT" -lt 1 ] || [ "$COUNT" -gt 20 ]; then
-            echo "Error: count must be a number between 1 and 20. Got: $COUNT"
+            echo "Error: count must be between 1 and 20."
             exit 1
           fi
 
@@ -69,40 +62,29 @@ jobs:
           OUTPUT=$(python hostname_generator.py \
             --environment "${{ github.event.inputs.environment }}" \
             --os          "${{ github.event.inputs.os }}" \
-            --version     "${{ github.event.inputs.version }}" \
             --count       "${{ github.event.inputs.count }}")
+
           echo "$OUTPUT"
 
-          # Parse generated hostnames from script output and write to GITHUB_OUTPUT
-          HOSTNAMES=$(echo "$OUTPUT" | grep -oP '(?<=\[)[0-9]+\] \K\S+' | tr '\n' ',' | sed 's/,$//')
-          echo "hostnames=$HOSTNAMES" >> $GITHUB_OUTPUT
-          echo "hostname_count=${{ github.event.inputs.count }}" >> $GITHUB_OUTPUT
-          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          echo "os_type=${{ github.event.inputs.os }}" >> $GITHUB_OUTPUT
-          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          # Write every key=value line from script output to GITHUB_OUTPUT
+          while IFS= read -r line; do
+            echo "$line" >> $GITHUB_OUTPUT
+          done <<< "$OUTPUT"
 
-          # Write individually: hostname_1, hostname_2 ...
-          i=1
-          for H in $(echo "$HOSTNAMES" | tr ',' ' '); do
-            echo "hostname_${i}=${H}" >> $GITHUB_OUTPUT
-            i=$((i+1))
-          done
-
-      - name: Save updated hostname state to cache
-        uses: actions/cache@v4
+      # Save updated state with unique key so next run can restore it
+      - uses: actions/cache@v4
         with:
           path: hostname_state.json
           key: hostname-state-${{ github.run_id }}
 
-      - name: Print outputs
+      - name: Summary
         run: |
-          echo "Hostnames   : ${{ steps.hostname.outputs.hostnames }}"
-          echo "Count       : ${{ steps.hostname.outputs.hostname_count }}"
-          echo "Environment : ${{ steps.hostname.outputs.environment }}"
-          echo "OS          : ${{ steps.hostname.outputs.os_type }}"
-          echo "Version     : ${{ steps.hostname.outputs.version }}"
-
-      - name: List all generated hostnames
-        run: |
-          python hostname_generator.py --list \
-            --environment nonprod --os linux --version dummy
+          echo "### Generated Hostnames" >> $GITHUB_STEP_SUMMARY
+          echo "| # | Hostname | Environment | OS |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|----------|-------------|----|" >> $GITHUB_STEP_SUMMARY
+          COUNT="${{ github.event.inputs.count }}"
+          for i in $(seq 1 $COUNT); do
+            VAR="hostname_$i"
+            H="${{ steps.hostname.outputs[VAR] }}"
+            echo "| $i | \`$H\` | ${{ github.event.inputs.environment }} | ${{ github.event.inputs.os }} |" >> $GITHUB_STEP_SUMMARY
+          done
