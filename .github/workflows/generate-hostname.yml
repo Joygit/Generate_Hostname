@@ -20,7 +20,7 @@ on:
           - linux
 
       count:
-        description: "Number of hostnames to generate"
+        description: "Number of hostnames to generate (1-20)"
         required: true
         default: "1"
         type: string
@@ -32,6 +32,7 @@ concurrency:
 
 jobs:
   generate-hostname:
+    name: "Generate ${{ github.event.inputs.count }} ${{ github.event.inputs.os }} (${{ github.event.inputs.environment }}) hostname(s)"
     runs-on: ubuntu-latest
 
     steps:
@@ -82,9 +83,22 @@ jobs:
           echo "### Generated Hostnames" >> $GITHUB_STEP_SUMMARY
           echo "| # | Hostname | Environment | OS |" >> $GITHUB_STEP_SUMMARY
           echo "|---|----------|-------------|----|" >> $GITHUB_STEP_SUMMARY
-          COUNT="${{ github.event.inputs.count }}"
-          for i in $(seq 1 $COUNT); do
-            VAR="hostname_$i"
-            H="${{ steps.hostname.outputs[VAR] }}"
-            echo "| $i | \`$H\` | ${{ github.event.inputs.environment }} | ${{ github.event.inputs.os }} |" >> $GITHUB_STEP_SUMMARY
-          done
+
+          # Parse hostnames directly from state file to avoid dynamic output refs
+          python - <<'EOF'
+          import json, os
+          with open("hostname_state.json") as f:
+              state = json.load(f)
+          count = int(os.environ["COUNT"])
+          recent = state["used"][-count:]
+          env    = os.environ["ENV"]
+          os_type = os.environ["OS_TYPE"]
+          summary = os.environ["GITHUB_STEP_SUMMARY"]
+          with open(summary, "a") as f:
+              for i, h in enumerate(recent, 1):
+                  f.write(f"| {i} | `{h}` | {env} | {os_type} |\n")
+          EOF
+        env:
+          COUNT:   ${{ github.event.inputs.count }}
+          ENV:     ${{ github.event.inputs.environment }}
+          OS_TYPE: ${{ github.event.inputs.os }}
