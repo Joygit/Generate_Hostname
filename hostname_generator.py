@@ -5,7 +5,8 @@ import string
 
 # -- Constants
 PREFIX    = "xs"
-CHARSET   = string.digits + string.ascii_lowercase  # 0-9, a-z (36 chars)
+# Digits weighted 3x vs letters so suffixes look like "10t629p" (more numbers than letters)
+CHARSET   = string.digits * 3 + string.ascii_lowercase  # 30 digits + 26 letters
 STATE_FILE = "hostname_state.json"
 
 ENV_MAP = {"nonprod": "n", "prod": "p"}
