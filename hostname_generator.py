@@ -79,10 +79,8 @@ def index_to_suffix(n: int, length: int = SUFFIX_LEN) -> str:
     return "".join(reversed(digits))
 
 
-# --------------------------------------------------------------------------- #
-# Core hostname builder
-# --------------------------------------------------------------------------- #
 
+# Core hostname builder
 def generate_hostname(env: str, os_type: str, state: dict) -> str:
     """
     Generate the next unique hostname and update state in-place.
@@ -102,10 +100,8 @@ def generate_hostname(env: str, os_type: str, state: dict) -> str:
     return hostname
 
 
-# --------------------------------------------------------------------------- #
-# CLI
-# --------------------------------------------------------------------------- #
 
+# CLI
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate a unique 11-char server hostname."
