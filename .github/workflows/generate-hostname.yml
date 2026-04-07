@@ -51,9 +51,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: hostname_state.json
-          key: hostname-state-v1
+          key: hostname-state-${{ github.run_id }}
           restore-keys: |
-            hostname-state-v1
+            hostname-state-
 
       - name: Validate count input
         run: |
@@ -92,7 +92,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: hostname_state.json
-          key: hostname-state-v1
+          key: hostname-state-${{ github.run_id }}
 
       - name: Print outputs
         run: |
